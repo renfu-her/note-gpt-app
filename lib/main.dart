@@ -7,8 +7,6 @@ import 'services/api_service.dart';
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
-    
-    // 確保在主 UI 線程上運行
     runApp(const MyApp());
   } catch (e) {
     debugPrint('初始化錯誤: $e');
@@ -30,13 +28,32 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.white,
       ),
       builder: (context, child) {
-        // 確保文字縮放不會影響佈局
         return MediaQuery(
           data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
           child: child!,
         );
       },
-      home: const AuthenticationWrapper(),
+      initialRoute: '/',
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case '/':
+            return MaterialPageRoute(
+              builder: (_) => const AuthenticationWrapper(),
+            );
+          case '/login':
+            return MaterialPageRoute(
+              builder: (_) => const LoginPage(),
+            );
+          case '/home':
+            return MaterialPageRoute(
+              builder: (_) => const HomePage(),
+            );
+          default:
+            return MaterialPageRoute(
+              builder: (_) => const AuthenticationWrapper(),
+            );
+        }
+      },
     );
   }
 }
@@ -103,6 +120,10 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
       );
     }
 
-    return _isAuthenticated ? const HomePage() : const LoginPage();
+    if (_isAuthenticated) {
+      return const HomePage();
+    }
+    
+    return const LoginPage();
   }
 }

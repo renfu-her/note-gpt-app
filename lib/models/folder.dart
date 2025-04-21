@@ -15,13 +15,13 @@ class Folder {
 
   factory Folder.fromJson(Map<String, dynamic> json) {
     return Folder(
-      id: json['id'],
-      name: json['name'],
-      arrowPath: json['arrow_path'],
-      sortOrder: json['sort_order'] ?? 0,
+      id: json['id'] as int,
+      name: json['name'] as String,
+      arrowPath: json['arrow_path'] as String,
+      sortOrder: json['sort_order'] as int? ?? 0,
       children: json['children'] != null
           ? List<Folder>.from(
-              json['children'].map((x) => Folder.fromJson(x)),
+              (json['children'] as List).map((x) => Folder.fromJson(x)),
             )
           : [],
     );

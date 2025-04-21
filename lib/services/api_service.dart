@@ -121,6 +121,42 @@ class ApiService {
     }
   }
 
+  Future<Folder> createFolder({
+    required String name,
+    int? parentId,
+    String? description,
+    int? sortOrder,
+    bool isActive = true,
+  }) async {
+    try {
+      final Map<String, dynamic> data = {
+        'name': name,
+        'parent_id': parentId,
+        'description': description ?? '',
+        'sort_order': sortOrder ?? 0,
+        'is_active': isActive,
+      };
+
+      print('Creating folder with data: $data'); // 用於調試
+
+      final response = await _dio.post(
+        '/folders',
+        data: data,
+      );
+
+      print('Response: ${response.data}'); // 用於調試
+
+      if (response.data['message'] == '資料夾建立成功') {
+        return Folder.fromJson(response.data['data']);
+      } else {
+        throw Exception('創建資料夾失敗');
+      }
+    } catch (e) {
+      print('Error creating folder: $e'); // 用於調試
+      throw Exception('創建資料夾失敗');
+    }
+  }
+
   Future<Map<String, dynamic>> getFolderNotes(int folderId) async {
     try {
       final response = await _dio.get('/notes/folders/$folderId');
@@ -154,9 +190,23 @@ class ApiService {
   }
 
   Future<void> logout() async {
+    
     try {
+      // 獲取當前的 token
+      final token = await _storage.read(key: 'token');
+      if (token == null) {
+        throw Exception('未找到認證 Token');
+      }
+
+      
+
       // 使用帶有認證的 dio 實例發送登出請求
-      await _dio.get('/logout');
+      await _dio.get(
+        '/logout',
+        options: Options(
+          headers: {'Authorization': 'Bearer $token'},
+        ),
+      );
     } catch (e) {
       throw Exception('登出失敗');
     } finally {
