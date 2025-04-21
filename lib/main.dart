@@ -1,68 +1,108 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
 import 'services/api_service.dart';
 
-void main() {
-  runApp(const MyApp());
+Future<void> main() async {
+  try {
+    WidgetsFlutterBinding.ensureInitialized();
+    
+    // 確保在主 UI 線程上運行
+    runApp(const MyApp());
+  } catch (e) {
+    debugPrint('初始化錯誤: $e');
+    rethrow;
+  }
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: '雲端筆記',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+        scaffoldBackgroundColor: Colors.white,
+      ),
+      builder: (context, child) {
+        // 確保文字縮放不會影響佈局
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
+          child: child!,
+        );
+      },
+      home: const AuthenticationWrapper(),
+    );
+  }
 }
 
-class _MyAppState extends State<MyApp> {
-  final ApiService _apiService = ApiService();
+class AuthenticationWrapper extends StatefulWidget {
+  const AuthenticationWrapper({Key? key}) : super(key: key);
+
+  @override
+  State<AuthenticationWrapper> createState() => _AuthenticationWrapperState();
+}
+
+class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
   bool _isLoading = true;
-  String _initialRoute = '/login';
+  bool _isAuthenticated = false;
 
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
+    _checkAuth();
   }
 
-  Future<void> _checkLoginStatus() async {
+  Future<void> _checkAuth() async {
     try {
-      final isLoggedIn = await _apiService.isLoggedIn();
-      setState(() {
-        _initialRoute = isLoggedIn ? '/home' : '/login';
-        _isLoading = false;
-      });
+      final apiService = ApiService();
+      final isLoggedIn = await apiService.isLoggedIn();
+
+      if (mounted) {
+        setState(() {
+          _isAuthenticated = isLoggedIn;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _initialRoute = '/login';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isAuthenticated = false;
+          _isLoading = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: CircularProgressIndicator(),
+      return Scaffold(
+        body: Container(
+          color: Colors.white,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.note_alt,
+                  size: 64,
+                  color: Theme.of(context).primaryColor,
+                ),
+                const SizedBox(height: 24),
+                const CircularProgressIndicator(),
+              ],
+            ),
           ),
         ),
       );
     }
 
-    return MaterialApp(
-      title: 'Note GPT',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      initialRoute: _initialRoute,
-      routes: {
-        '/login': (context) => const LoginPage(),
-        '/home': (context) => const HomePage(),
-      },
-    );
+    return _isAuthenticated ? const HomePage() : const LoginPage();
   }
 }

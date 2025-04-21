@@ -53,7 +53,7 @@ class _LoginPageState extends State<LoginPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
-                  'Note GPT',
+                  '雲端筆記',
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,

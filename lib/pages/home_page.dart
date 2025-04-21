@@ -233,7 +233,7 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
-        title: Text(_currentFolderName.isEmpty ? 'Note GPT' : _currentFolderName),
+        title: Text(_currentFolderName.isEmpty ? '雲端筆記' : _currentFolderName),
         leading: IconButton(
           icon: const Icon(Icons.menu),
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
@@ -242,9 +242,60 @@ class _HomePageState extends State<HomePage> {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
-              await _apiService.logout();
-              if (mounted) {
+              try {
+                // 顯示確認對話框
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('確認登出'),
+                    content: const Text('確定要登出嗎？'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('取消'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('確定'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm != true) return;
+
+                // 顯示載入指示器
+                if (!mounted) return;
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+
+                await _apiService.logout();
+
+                if (!mounted) return;
+                // 關閉載入指示器
+                Navigator.pop(context);
+                
+                // 返回登入頁面
                 Navigator.pushReplacementNamed(context, '/login');
+              } catch (e) {
+                // 如果載入指示器還在顯示，就關閉它
+                if (!mounted) return;
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                }
+
+                // 顯示錯誤訊息
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('登出失敗：${e.toString()}'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
               }
             },
           ),
@@ -259,7 +310,7 @@ class _HomePageState extends State<HomePage> {
               ),
               child: const Center(
                 child: Text(
-                  'Note GPT',
+                  '雲端筆記',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 24,

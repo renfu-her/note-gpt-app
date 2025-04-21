@@ -155,8 +155,12 @@ class ApiService {
 
   Future<void> logout() async {
     try {
-      await _dio.post('/logout');
+      // 使用帶有認證的 dio 實例發送登出請求
+      await _dio.get('/logout');
+    } catch (e) {
+      throw Exception('登出失敗');
     } finally {
+      // 無論是否成功，都清除本地儲存的 token
       await _storage.delete(key: 'token');
     }
   }
