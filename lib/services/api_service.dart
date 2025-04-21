@@ -16,6 +16,19 @@ class ApiService {
     _setupInterceptors();
   }
 
+  Future<bool> isLoggedIn() async {
+    try {
+      final token = await _storage.read(key: 'token');
+      if (token == null) return false;
+      
+      // 嘗試獲取資料夾列表來驗證 token 是否有效
+      await getFolders();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   void _setupInterceptors() {
     // 為主要的 dio 實例添加認證攔截器
     _dio.interceptors.add(
@@ -114,21 +127,27 @@ class ApiService {
       return {
         'id': response.data['id'] as int,
         'name': response.data['name'] as String,
-        'parent_id': response.data['parent_id'] as int,
-        'is_active': response.data['is_active'] as int,
-        'notes': List<Note>.from(
-          (response.data['notes'] as List).map((note) => Note.fromJson(note)),
-        ),
+        'notes': (response.data['notes'] as List).map((note) => {
+          'id': note['id'] as int,
+          'title': note['title'] as String,
+          'created_at': DateTime.parse(note['created_at']),
+        }).toList(),
       };
     } catch (e) {
       throw Exception('獲取資料夾筆記失敗');
     }
   }
 
-  Future<Note> getNote(int noteId) async {
+  Future<Map<String, dynamic>> getNote(int noteId) async {
     try {
       final response = await _dio.get('/notes/$noteId');
-      return Note.fromJson(response.data['data']);
+      final data = response.data['data'];
+      return {
+        'id': data['id'] as int,
+        'title': data['title'] as String,
+        'content': data['content'] as String,
+        'created_at': DateTime.parse(data['created_at']),
+      };
     } catch (e) {
       throw Exception('獲取筆記失敗');
     }

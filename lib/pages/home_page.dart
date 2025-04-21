@@ -13,12 +13,14 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final ApiService _apiService = ApiService();
-  List<Folder> _folders = [];
-  List<Note> _currentNotes = [];
-  String _currentFolderName = '';
-  Note? _selectedNote;
-  bool _isLoading = true;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  
+  String _currentFolderName = '';
+  List<Map<String, dynamic>> _currentNotes = [];
+  Map<String, dynamic>? _selectedNote;
+  List<Folder> _folders = [];
+  bool _isLoading = false;
+  bool _isLoadingNote = false;
 
   @override
   void initState() {
@@ -28,13 +30,16 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _loadFolders() async {
     try {
+      setState(() => _isLoading = true);
       final folders = await _apiService.getFolders();
+      if (!mounted) return;
       setState(() {
         _folders = folders;
         _isLoading = false;
       });
     } catch (e) {
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.toString())),
         );
@@ -54,30 +59,55 @@ class _HomePageState extends State<HomePage> {
       
       setState(() {
         _currentFolderName = response['name'] as String;
-        final notes = response['notes'] as List<Note>;
-        _currentNotes = notes..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        _selectedNote = _currentNotes.isNotEmpty ? _currentNotes.first : null;
+        _currentNotes = List<Map<String, dynamic>>.from(response['notes']);
+        _currentNotes.sort((a, b) => (b['created_at'] as DateTime)
+            .compareTo(a['created_at'] as DateTime));
+        _selectedNote = null;
         _isLoading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
       if (mounted) {
+        setState(() {
+          _currentFolderName = '';
+          _currentNotes = [];
+          _selectedNote = null;
+          _isLoading = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
+          SnackBar(
+            content: Text('無法載入資料夾內容：${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        Navigator.pop(context);
+      }
+    }
+  }
+
+  Future<void> _loadNote(int noteId) async {
+    try {
+      setState(() => _isLoadingNote = true);
+      final note = await _apiService.getNote(noteId);
+      if (!mounted) return;
+      setState(() {
+        _selectedNote = note;
+        _isLoadingNote = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingNote = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('無法載入筆記內容：${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
   }
 
-  void _selectNote(Note note) {
-    setState(() {
-      _selectedNote = note;
-    });
-    
-    // 在窄螢幕上選擇筆記後關閉抽屜
-    if (MediaQuery.of(context).size.width <= 600) {
-      Navigator.pop(context);
-    }
+  void _selectNote(Map<String, dynamic> note) {
+    _loadNote(note['id'] as int);
   }
 
   String _formatDate(DateTime date) {
@@ -85,73 +115,130 @@ class _HomePageState extends State<HomePage> {
         '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
 
-  Widget _buildNoteList({bool inDrawer = false}) {
+  Widget _buildNoteList() {
     if (_currentNotes.isEmpty) {
-      return const Center(child: Text('此資料夾中沒有筆記'));
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.note_alt_outlined,
+              size: 48,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '此資料夾中沒有筆記',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
-    return ListView.builder(
+    return ListView.separated(
       itemCount: _currentNotes.length,
+      separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final note = _currentNotes[index];
         return ListTile(
           title: Text(
-            note.title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+            note['title'] as String,
+            style: const TextStyle(fontSize: 16),
           ),
           subtitle: Text(
-            _formatDate(note.createdAt),
+            _formatDate(note['created_at'] as DateTime),
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey[600],
             ),
           ),
-          selected: _selectedNote?.id == note.id,
           onTap: () => _selectNote(note),
         );
       },
     );
   }
 
+  Widget buildNoteContent() {
+    if (_selectedNote == null) {
+      return _buildNoteList();
+    }
+
+    if (_isLoadingNote) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Container(
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                bottom: BorderSide(
+                  color: Colors.grey[300]!,
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _selectedNote!['title'] as String,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _formatDate(_selectedNote!['created_at'] as DateTime),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Container(
+              color: Colors.white,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  _selectedNote!['content'] as String,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isWideScreen = MediaQuery.of(context).size.width > 600;
-
     return Scaffold(
       key: _scaffoldKey,
+      backgroundColor: Colors.white,
       appBar: AppBar(
+        backgroundColor: Theme.of(context).primaryColor,
+        foregroundColor: Colors.white,
         title: Text(_currentFolderName.isEmpty ? 'Note GPT' : _currentFolderName),
         leading: IconButton(
           icon: const Icon(Icons.menu),
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         actions: [
-          if (!isWideScreen && _currentNotes.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.list),
-              onPressed: () {
-                showModalBottomSheet(
-                  context: context,
-                  builder: (context) => SizedBox(
-                    height: MediaQuery.of(context).size.height * 0.7,
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Text(
-                            _currentFolderName,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ),
-                        const Divider(),
-                        Expanded(child: _buildNoteList(inDrawer: true)),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
@@ -190,81 +277,14 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Row(
-              children: [
-                if (isWideScreen) ...[
-                  SizedBox(
-                    width: 300,
-                    child: Card(
-                      margin: const EdgeInsets.all(8),
-                      child: _buildNoteList(),
-                    ),
-                  ),
-                ],
-                Expanded(
-                  child: _selectedNote == null
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.note,
-                                size: 64,
-                                color: Colors.grey[400],
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                '選擇一個筆記來查看內容',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : Card(
-                          margin: const EdgeInsets.all(8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _selectedNote!.title,
-                                      style: Theme.of(context).textTheme.headlineSmall,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      _formatDate(_selectedNote!.createdAt),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey[600],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Divider(),
-                              Expanded(
-                                child: SingleChildScrollView(
-                                  padding: const EdgeInsets.all(16),
-                                  child: MarkdownViewer(
-                                    markdownData: _selectedNote!.content,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                ),
-              ],
-            ),
+      body: SafeArea(
+        child: Container(
+          color: Colors.white,
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : buildNoteContent(),
+        ),
+      ),
     );
   }
 
