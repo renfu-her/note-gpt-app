@@ -18,6 +18,7 @@ class _HomePageState extends State<HomePage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   
   String _currentFolderName = '';
+  String _currentFolderId = '';
   List<Map<String, dynamic>> _currentNotes = [];
   Map<String, dynamic>? _selectedNote;
   List<Folder> _folders = [];
@@ -56,10 +57,8 @@ class _HomePageState extends State<HomePage> {
       
       if (!mounted) return;
       
-      // 關閉抽屜
-      Navigator.pop(context);
-      
       setState(() {
+        _currentFolderId = folderId.toString();
         _currentFolderName = response['name'] as String;
         _currentNotes = List<Map<String, dynamic>>.from(response['notes']);
         _currentNotes.sort((a, b) => (b['created_at'] as DateTime)
@@ -70,12 +69,12 @@ class _HomePageState extends State<HomePage> {
     } catch (e) {
       if (mounted) {
         setState(() {
+          _currentFolderId = '';
           _currentFolderName = '';
           _currentNotes = [];
           _selectedNote = null;
           _isLoading = false;
         });
-        Navigator.pop(context);
       }
     }
   }
@@ -235,6 +234,11 @@ class _HomePageState extends State<HomePage> {
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         actions: [
+          if (_currentFolderName.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.note_add),
+              onPressed: () => _showCreateNoteDialog(context),
+            ),
           IconButton(
             icon: const Icon(Icons.create_new_folder),
             onPressed: () => _showCreateFolderDialog(context),
@@ -530,5 +534,126 @@ class _HomePageState extends State<HomePage> {
     // 清理控制器
     nameController.dispose();
     descriptionController.dispose();
+  }
+
+  Future<void> _showCreateNoteDialog(BuildContext context) async {
+    if (_currentFolderId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('請先選擇資料夾'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final titleController = TextEditingController();
+    final contentController = TextEditingController();
+    final navigatorContext = Navigator.of(context);
+    final scaffoldContext = ScaffoldMessenger.of(context);
+    
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('新增筆記'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: '標題',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: contentController,
+                decoration: const InputDecoration(
+                  labelText: '內容',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+                maxLines: 5,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => navigatorContext.pop(),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final title = titleController.text.trim();
+              final content = contentController.text.trim();
+              
+              if (title.isEmpty) {
+                scaffoldContext.showSnackBar(
+                  const SnackBar(
+                    content: Text('請輸入標題'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              try {
+                // 顯示載入指示器
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+
+                final newNote = await _apiService.createNote(
+                  folderId: int.parse(_currentFolderId),
+                  title: title,
+                  content: content,
+                );
+                
+                if (!mounted) return;
+
+                // 關閉載入指示器和對話框
+                navigatorContext.pop();  // 關閉載入指示器
+                navigatorContext.pop();  // 關閉創建對話框
+                
+                // 更新筆記列表
+                setState(() {
+                  _currentNotes.insert(0, {
+                    'id': newNote['id'],
+                    'title': newNote['title'],
+                    'created_at': newNote['created_at'],
+                  });
+                });
+                
+                scaffoldContext.showSnackBar(
+                  const SnackBar(content: Text('筆記創建成功')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                navigatorContext.pop();  // 關閉載入指示器
+                
+                scaffoldContext.showSnackBar(
+                  SnackBar(
+                    content: Text(e.toString()),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text('創建'),
+          ),
+        ],
+      ),
+    );
+
+    // 清理控制器
+    titleController.dispose();
+    contentController.dispose();
   }
 } 

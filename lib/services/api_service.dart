@@ -243,4 +243,38 @@ class ApiService {
       throw '註冊失敗';
     }
   }
+
+  Future<Map<String, dynamic>> createNote({
+    required int folderId,
+    required String title,
+    required String content,
+  }) async {
+    try {
+      // 使用帶有認證的 _dio 實例
+      final response = await _dio.post(
+        '/notes',
+        data: {
+          'folder_id': folderId,
+          'title': title,
+          'content': content,
+        },
+      );
+
+      if (response.data['error'] != null) {
+        throw response.data['message'];
+      }
+
+      return {
+        'id': response.data['data']['id'] as int,
+        'title': response.data['data']['title'] as String,
+        'content': response.data['data']['content'] as String,
+        'created_at': DateTime.parse(response.data['data']['created_at']),
+      };
+    } catch (e) {
+      if (e is DioException && e.response?.data['message'] != null) {
+        throw e.response?.data['message'];
+      }
+      throw '創建筆記失敗';
+    }
+  }
 } 
