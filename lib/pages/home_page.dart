@@ -129,6 +129,16 @@ class _HomePageState extends State<HomePage> {
                 color: Colors.grey[600],
               ),
             ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.note_add),
+              label: const Text('新增筆記'),
+              onPressed: () => _showCreateNoteDialog(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).primaryColor,
+                foregroundColor: Colors.white,
+              ),
+            ),
           ],
         ),
       );
@@ -328,7 +338,10 @@ class _HomePageState extends State<HomePage> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : SingleChildScrollView(
-                      child: _buildFolderTree(_folders),
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 16.0),
+                        child: _buildFolderTree(_folders),
+                      ),
                     ),
             ),
           ],
@@ -362,14 +375,6 @@ class _HomePageState extends State<HomePage> {
                     top: 12,
                     bottom: 12,
                     right: 16,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      left: BorderSide(
-                        color: Colors.blue.withOpacity(0.3),
-                        width: 3,
-                      ),
-                    ),
                   ),
                   child: Row(
                     children: [
@@ -536,21 +541,33 @@ class _HomePageState extends State<HomePage> {
     descriptionController.dispose();
   }
 
-  Future<void> _showCreateNoteDialog(BuildContext context) async {
-    if (_currentFolderId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('請先選擇資料夾'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
+  // 展平成帶縮排的資料夾清單
+  List<Map<String, dynamic>> _flattenFolders(List<Folder> folders, {int level = 0}) {
+    List<Map<String, dynamic>> result = [];
+    for (final folder in folders) {
+      result.add({
+        'folder': folder,
+        'indent': level,
+      });
+      if (folder.children.isNotEmpty) {
+        result.addAll(_flattenFolders(folder.children, level: level + 1));
+      }
     }
+    return result;
+  }
 
+  Future<void> _showCreateNoteDialog(BuildContext context) async {
+    Folder? selectedFolder = _folders.isNotEmpty
+        ? _folders.firstWhere(
+            (f) => f.id.toString() == _currentFolderId,
+            orElse: () => _folders.first,
+          )
+        : null;
     final titleController = TextEditingController();
     final contentController = TextEditingController();
     final navigatorContext = Navigator.of(context);
     final scaffoldContext = ScaffoldMessenger.of(context);
+    final flatFolders = _flattenFolders(_folders);
     
     await showDialog(
       context: context,
@@ -560,6 +577,28 @@ class _HomePageState extends State<HomePage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              DropdownButtonFormField<Folder>(
+                value: selectedFolder,
+                decoration: const InputDecoration(
+                  labelText: '選擇資料夾',
+                  border: OutlineInputBorder(),
+                ),
+                items: flatFolders.map((item) {
+                  final folder = item['folder'] as Folder;
+                  final indent = item['indent'] as int;
+                  return DropdownMenuItem<Folder>(
+                    value: folder,
+                    child: Padding(
+                      padding: EdgeInsets.only(left: indent * 20.0),
+                      child: Text(folder.name),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (folder) {
+                  selectedFolder = folder;
+                },
+              ),
+              const SizedBox(height: 16),
               TextField(
                 controller: titleController,
                 decoration: const InputDecoration(
@@ -589,7 +628,6 @@ class _HomePageState extends State<HomePage> {
             onPressed: () async {
               final title = titleController.text.trim();
               final content = contentController.text.trim();
-              
               if (title.isEmpty) {
                 scaffoldContext.showSnackBar(
                   const SnackBar(
@@ -599,7 +637,15 @@ class _HomePageState extends State<HomePage> {
                 );
                 return;
               }
-
+              if (selectedFolder == null) {
+                scaffoldContext.showSnackBar(
+                  const SnackBar(
+                    content: Text('請選擇資料夾'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
               try {
                 // 顯示載入指示器
                 showDialog(
@@ -609,35 +655,31 @@ class _HomePageState extends State<HomePage> {
                     child: CircularProgressIndicator(),
                   ),
                 );
-
                 final newNote = await _apiService.createNote(
-                  folderId: int.parse(_currentFolderId),
+                  folderId: selectedFolder!.id,
                   title: title,
                   content: content,
                 );
-                
                 if (!mounted) return;
-
                 // 關閉載入指示器和對話框
                 navigatorContext.pop();  // 關閉載入指示器
                 navigatorContext.pop();  // 關閉創建對話框
-                
-                // 更新筆記列表
-                setState(() {
-                  _currentNotes.insert(0, {
-                    'id': newNote['id'],
-                    'title': newNote['title'],
-                    'created_at': newNote['created_at'],
+                // 如果目前顯示的資料夾就是新筆記的資料夾，才更新列表
+                if (_currentFolderId == selectedFolder!.id.toString()) {
+                  setState(() {
+                    _currentNotes.insert(0, {
+                      'id': newNote['id'],
+                      'title': newNote['title'],
+                      'created_at': newNote['created_at'],
+                    });
                   });
-                });
-                
+                }
                 scaffoldContext.showSnackBar(
                   const SnackBar(content: Text('筆記創建成功')),
                 );
               } catch (e) {
                 if (!mounted) return;
                 navigatorContext.pop();  // 關閉載入指示器
-                
                 scaffoldContext.showSnackBar(
                   SnackBar(
                     content: Text(e.toString()),
@@ -651,7 +693,6 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
-
     // 清理控制器
     titleController.dispose();
     contentController.dispose();
