@@ -82,10 +82,18 @@ class ApiService {
       );
       
       final data = response.data;
+      if (data['error'] != null) {
+        throw data['message'];
+      }
+      
+      // 儲存 token
       await _storage.write(key: 'token', value: data['token']);
       return data;
     } catch (e) {
-      throw Exception('登入失敗');
+      if (e is DioException && e.response?.data['message'] != null) {
+        throw e.response?.data['message'];
+      }
+      throw '登入失敗';
     }
   }
 
@@ -190,27 +198,22 @@ class ApiService {
   }
 
   Future<void> logout() async {
-    
     try {
       // 獲取當前的 token
       final token = await _storage.read(key: 'token');
       if (token == null) {
-        throw Exception('未找到認證 Token');
+        throw '未找到認證 Token';
       }
 
-      
-
-      // 使用帶有認證的 dio 實例發送登出請求
-      await _dio.get(
-        '/logout',
-        options: Options(
-          headers: {'Authorization': 'Bearer $token'},
-        ),
-      );
-    } catch (e) {
-      throw Exception('登出失敗');
+      try {
+        // 嘗試調用登出 API
+        await _dio.get('/logout');
+      } catch (e) {
+        // 忽略 API 錯誤
+        print('登出 API 調用失敗：$e');
+      }
     } finally {
-      // 無論是否成功，都清除本地儲存的 token
+      // 無論如何都清除本地儲存的 token
       await _storage.delete(key: 'token');
     }
   }
