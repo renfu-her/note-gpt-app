@@ -214,4 +214,30 @@ class ApiService {
       await _storage.delete(key: 'token');
     }
   }
+
+  Future<void> register({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await _authDio.post(
+        '/register',
+        data: {
+          'name': name,
+          'email': email,
+          'password': password,
+        },
+      );
+      
+      if (response.data['error'] != null) {
+        throw response.data['message'];
+      }
+    } catch (e) {
+      if (e is DioException && e.response?.data['message'] != null) {
+        throw e.response?.data['message'];
+      }
+      throw '註冊失敗';
+    }
+  }
 } 

@@ -75,12 +75,6 @@ class _HomePageState extends State<HomePage> {
           _selectedNote = null;
           _isLoading = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('無法載入資料夾內容：${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
         Navigator.pop(context);
       }
     }
