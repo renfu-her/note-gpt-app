@@ -277,4 +277,34 @@ class ApiService {
       throw '創建筆記失敗';
     }
   }
+
+  Future<Map<String, dynamic>> updateNote({
+    required int noteId,
+    required String title,
+    required String content,
+  }) async {
+    try {
+      final response = await _dio.put(
+        '/notes/$noteId',
+        data: {
+          'title': title,
+          'content': content,
+        },
+      );
+      if (response.data['error'] != null) {
+        throw response.data['message'];
+      }
+      return {
+        'id': response.data['data']['id'] as int,
+        'title': response.data['data']['title'] as String,
+        'content': response.data['data']['content'] as String,
+        'created_at': DateTime.parse(response.data['data']['created_at']),
+      };
+    } catch (e) {
+      if (e is DioException && e.response?.data['message'] != null) {
+        throw e.response?.data['message'];
+      }
+      throw '更新筆記失敗';
+    }
+  }
 } 

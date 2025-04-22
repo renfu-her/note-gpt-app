@@ -17,6 +17,9 @@ dependencies:
   flutter_secure_storage: ^9.0.0
   dio: ^5.4.1
   url_launcher: ^6.2.5
+  flutter_html: ^3.0.0
+  markdown: ^7.3.0
+  flutter_launcher_icons: ^0.14.3
 
 dev_dependencies:
   flutter_test:
@@ -25,3 +28,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+flutter_icons:
+  android: "launcher_icon"
+  ios: true
+  remove_alpah_ios: true
+  image_path: "assets/ic_launcher.png"

@@ -4,6 +4,8 @@ import '../models/note.dart';
 import '../services/api_service.dart';
 import '../widgets/markdown_viewer.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:markdown/markdown.dart' as md;
+import 'package:flutter_html/flutter_html.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
@@ -192,20 +194,32 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-            child: Column(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _selectedNote!['title'] as String,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _formatDate(_selectedNote!['created_at'] as DateTime),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _selectedNote!['title'] as String,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _formatDate(_selectedNote!['created_at'] as DateTime),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
                   ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  tooltip: '編輯',
+                  onPressed: () => _showEditNoteDialog(context, _selectedNote!),
                 ),
               ],
             ),
@@ -215,12 +229,29 @@ class _HomePageState extends State<HomePage> {
               color: Colors.white,
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
-                child: Text(
-                  _selectedNote!['content'] as String,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    height: 1.5,
-                  ),
+                child: Builder(
+                  builder: (context) {
+                    final htmlContent = md.markdownToHtml(_selectedNote!['content'] as String);
+                    print('DEBUG: markdownToHtml =\n$htmlContent');
+                    return Html(
+                      data: htmlContent,
+                      style: {
+                        "pre": Style(
+                          backgroundColor: Colors.grey.shade200,
+                          padding: HtmlPaddings.all(8),
+                          fontFamily: 'monospace',
+                          fontSize: FontSize(14),
+                          whiteSpace: WhiteSpace.pre,
+                        ),
+                        "code": Style(
+                          backgroundColor: Colors.grey.shade100,
+                          padding: HtmlPaddings.symmetric(horizontal: 4, vertical: 2),
+                          fontFamily: 'monospace',
+                          fontSize: FontSize(14),
+                        ),
+                      },
+                    );
+                  },
                 ),
               ),
             ),
@@ -565,18 +596,30 @@ class _HomePageState extends State<HomePage> {
         : null;
     final titleController = TextEditingController();
     final contentController = TextEditingController();
-    final navigatorContext = Navigator.of(context);
     final scaffoldContext = ScaffoldMessenger.of(context);
     final flatFolders = _flattenFolders(_folders);
-    
-    await showDialog(
+
+    await showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('新增筆記'),
-        content: SingleChildScrollView(
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.95,
+        decoration: BoxDecoration(
+          color: Theme.of(context).dialogBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 16, right: 16, top: 24,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+          ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Text('新增筆記', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 24),
               DropdownButtonFormField<Folder>(
                 value: selectedFolder,
                 decoration: const InputDecoration(
@@ -607,93 +650,220 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               const SizedBox(height: 16),
-              TextField(
-                controller: contentController,
-                decoration: const InputDecoration(
-                  labelText: '內容',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
+              Expanded(
+                child: TextField(
+                  controller: contentController,
+                  decoration: const InputDecoration(
+                    labelText: '內容',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                  maxLines: null,
+                  expands: true,
+                  keyboardType: TextInputType.multiline,
+                  textAlignVertical: TextAlignVertical.top,
                 ),
-                maxLines: 5,
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('取消'),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton(
+                    onPressed: () async {
+                      final title = titleController.text.trim();
+                      final content = contentController.text.trim();
+                      if (title.isEmpty) {
+                        scaffoldContext.showSnackBar(
+                          const SnackBar(
+                            content: Text('請輸入標題'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      if (selectedFolder == null) {
+                        scaffoldContext.showSnackBar(
+                          const SnackBar(
+                            content: Text('請選擇資料夾'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      try {
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (context) => const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        );
+                        final newNote = await _apiService.createNote(
+                          folderId: selectedFolder!.id,
+                          title: title,
+                          content: content,
+                        );
+                        if (!mounted) return;
+                        if (_currentFolderId == selectedFolder!.id.toString()) {
+                          setState(() {
+                            _currentNotes.insert(0, {
+                              'id': newNote['id'],
+                              'title': newNote['title'],
+                              'created_at': newNote['created_at'],
+                            });
+                          });
+                        }
+                        Navigator.of(context).pop(); // 關閉 bottom sheet
+                        scaffoldContext.showSnackBar(
+                          const SnackBar(content: Text('筆記創建成功')),
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        Navigator.of(context).pop(); // 關閉載入指示器
+                        scaffoldContext.showSnackBar(
+                          SnackBar(
+                            content: Text(e.toString()),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    },
+                    child: const Text('創建'),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => navigatorContext.pop(),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final title = titleController.text.trim();
-              final content = contentController.text.trim();
-              if (title.isEmpty) {
-                scaffoldContext.showSnackBar(
-                  const SnackBar(
-                    content: Text('請輸入標題'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-              if (selectedFolder == null) {
-                scaffoldContext.showSnackBar(
-                  const SnackBar(
-                    content: Text('請選擇資料夾'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-              try {
-                // 顯示載入指示器
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (context) => const Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                );
-                final newNote = await _apiService.createNote(
-                  folderId: selectedFolder!.id,
-                  title: title,
-                  content: content,
-                );
-                if (!mounted) return;
-                // 關閉載入指示器和對話框
-                navigatorContext.pop();  // 關閉載入指示器
-                navigatorContext.pop();  // 關閉創建對話框
-                // 如果目前顯示的資料夾就是新筆記的資料夾，才更新列表
-                if (_currentFolderId == selectedFolder!.id.toString()) {
-                  setState(() {
-                    _currentNotes.insert(0, {
-                      'id': newNote['id'],
-                      'title': newNote['title'],
-                      'created_at': newNote['created_at'],
-                    });
-                  });
-                }
-                scaffoldContext.showSnackBar(
-                  const SnackBar(content: Text('筆記創建成功')),
-                );
-              } catch (e) {
-                if (!mounted) return;
-                navigatorContext.pop();  // 關閉載入指示器
-                scaffoldContext.showSnackBar(
-                  SnackBar(
-                    content: Text(e.toString()),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            child: const Text('創建'),
-          ),
-        ],
       ),
     );
     // 清理控制器
+    titleController.dispose();
+    contentController.dispose();
+  }
+
+  void _showEditNoteDialog(BuildContext context, Map<String, dynamic> note) async {
+    final titleController = TextEditingController(text: note['title'] as String);
+    final contentController = TextEditingController(text: note['content'] as String);
+    final scaffoldContext = ScaffoldMessenger.of(context);
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.95,
+        decoration: BoxDecoration(
+          color: Theme.of(context).dialogBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 16, right: 16, top: 24,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('編輯筆記', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 24),
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: '標題',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: TextField(
+                  controller: contentController,
+                  decoration: const InputDecoration(
+                    labelText: '內容',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                  maxLines: null,
+                  expands: true,
+                  keyboardType: TextInputType.multiline,
+                  textAlignVertical: TextAlignVertical.top,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('取消'),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton(
+                    onPressed: () async {
+                      final title = titleController.text.trim();
+                      final content = contentController.text.trim();
+                      if (title.isEmpty) {
+                        scaffoldContext.showSnackBar(
+                          const SnackBar(
+                            content: Text('請輸入標題'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      try {
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (context) => const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        );
+                        final updatedNote = await _apiService.updateNote(
+                          noteId: note['id'] as int,
+                          title: title,
+                          content: content,
+                        );
+                        if (!mounted) return;
+                        setState(() {
+                          _selectedNote = updatedNote;
+                          // 同步更新 _currentNotes
+                          final idx = _currentNotes.indexWhere((n) => n['id'] == updatedNote['id']);
+                          if (idx != -1) {
+                            _currentNotes[idx]['title'] = updatedNote['title'];
+                            _currentNotes[idx]['created_at'] = updatedNote['created_at'];
+                          }
+                        });
+                        Navigator.of(context).pop(); // 關閉 loading
+                        Navigator.of(context).pop(); // 關閉 bottom sheet
+                        scaffoldContext.showSnackBar(
+                          const SnackBar(content: Text('筆記已更新')),
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        Navigator.of(context).pop(); // 關閉 loading
+                        scaffoldContext.showSnackBar(
+                          SnackBar(
+                            content: Text(e.toString()),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    },
+                    child: const Text('儲存'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
     titleController.dispose();
     contentController.dispose();
   }
