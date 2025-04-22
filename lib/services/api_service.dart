@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/folder.dart';
@@ -247,23 +248,25 @@ class ApiService {
   Future<Map<String, dynamic>> createNote({
     required int folderId,
     required String title,
-    required String content,
+    String? content,
+    File? file,
   }) async {
     try {
-      // 使用帶有認證的 _dio 實例
+      final formData = FormData.fromMap({
+        'folder_id': folderId,
+        'title': title,
+        if (content != null) 'content': content,
+        if (file != null)
+          'file': await MultipartFile.fromFile(file.path, filename: file.path.split('/').last),
+      });
       final response = await _dio.post(
         '/notes',
-        data: {
-          'folder_id': folderId,
-          'title': title,
-          'content': content,
-        },
+        data: formData,
+        options: Options(contentType: 'multipart/form-data'),
       );
-
       if (response.data['error'] != null) {
         throw response.data['message'];
       }
-
       return {
         'id': response.data['data']['id'] as int,
         'title': response.data['data']['title'] as String,
@@ -281,15 +284,20 @@ class ApiService {
   Future<Map<String, dynamic>> updateNote({
     required int noteId,
     required String title,
-    required String content,
+    String? content,
+    File? file,
   }) async {
     try {
+      final formData = FormData.fromMap({
+        'title': title,
+        if (content != null) 'content': content,
+        if (file != null)
+          'file': await MultipartFile.fromFile(file.path, filename: file.path.split('/').last),
+      });
       final response = await _dio.put(
         '/notes/$noteId',
-        data: {
-          'title': title,
-          'content': content,
-        },
+        data: formData,
+        options: Options(contentType: 'multipart/form-data'),
       );
       if (response.data['error'] != null) {
         throw response.data['message'];

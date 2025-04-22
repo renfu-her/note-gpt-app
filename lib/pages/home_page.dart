@@ -6,6 +6,8 @@ import '../widgets/markdown_viewer.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:flutter_html/flutter_html.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
 
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
@@ -598,146 +600,206 @@ class _HomePageState extends State<HomePage> {
     final contentController = TextEditingController();
     final scaffoldContext = ScaffoldMessenger.of(context);
     final flatFolders = _flattenFolders(_folders);
+    File? selectedFile;
+    bool useFile = false;
 
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.95,
-        decoration: BoxDecoration(
-          color: Theme.of(context).dialogBackgroundColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: 16, right: 16, top: 24,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => Container(
+          height: MediaQuery.of(context).size.height * 0.95,
+          decoration: BoxDecoration(
+            color: Theme.of(context).dialogBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.max,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('新增筆記', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 24),
-              DropdownButtonFormField<Folder>(
-                value: selectedFolder,
-                decoration: const InputDecoration(
-                  labelText: '選擇資料夾',
-                  border: OutlineInputBorder(),
-                ),
-                items: flatFolders.map((item) {
-                  final folder = item['folder'] as Folder;
-                  final indent = item['indent'] as int;
-                  return DropdownMenuItem<Folder>(
-                    value: folder,
-                    child: Padding(
-                      padding: EdgeInsets.only(left: indent * 20.0),
-                      child: Text(folder.name),
-                    ),
-                  );
-                }).toList(),
-                onChanged: (folder) {
-                  selectedFolder = folder;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(
-                  labelText: '標題',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: TextField(
-                  controller: contentController,
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16, right: 16, top: 24,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.max,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('新增筆記', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 24),
+                DropdownButtonFormField<Folder>(
+                  value: selectedFolder,
                   decoration: const InputDecoration(
-                    labelText: '內容',
+                    labelText: '選擇資料夾',
                     border: OutlineInputBorder(),
-                    alignLabelWithHint: true,
                   ),
-                  maxLines: null,
-                  expands: true,
-                  keyboardType: TextInputType.multiline,
-                  textAlignVertical: TextAlignVertical.top,
+                  items: flatFolders.map((item) {
+                    final folder = item['folder'] as Folder;
+                    final indent = item['indent'] as int;
+                    return DropdownMenuItem<Folder>(
+                      value: folder,
+                      child: Padding(
+                        padding: EdgeInsets.only(left: indent * 20.0),
+                        child: Text(folder.name),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (folder) {
+                    selectedFolder = folder;
+                  },
                 ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('取消'),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(
+                    labelText: '標題',
+                    border: OutlineInputBorder(),
                   ),
-                  const SizedBox(width: 16),
-                  ElevatedButton(
-                    onPressed: () async {
-                      final title = titleController.text.trim();
-                      final content = contentController.text.trim();
-                      if (title.isEmpty) {
-                        scaffoldContext.showSnackBar(
-                          const SnackBar(
-                            content: Text('請輸入標題'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                        return;
-                      }
-                      if (selectedFolder == null) {
-                        scaffoldContext.showSnackBar(
-                          const SnackBar(
-                            content: Text('請選擇資料夾'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                        return;
-                      }
-                      try {
-                        showDialog(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (context) => const Center(
-                            child: CircularProgressIndicator(),
-                          ),
-                        );
-                        final newNote = await _apiService.createNote(
-                          folderId: selectedFolder!.id,
-                          title: title,
-                          content: content,
-                        );
-                        if (!mounted) return;
-                        if (_currentFolderId == selectedFolder!.id.toString()) {
-                          setState(() {
-                            _currentNotes.insert(0, {
-                              'id': newNote['id'],
-                              'title': newNote['title'],
-                              'created_at': newNote['created_at'],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: useFile,
+                      onChanged: (v) async {
+                        if (v == true) {
+                          FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['md']);
+                          if (result != null && result.files.single.path != null) {
+                            setState(() {
+                              selectedFile = File(result.files.single.path!);
+                              useFile = true;
                             });
+                          }
+                        } else {
+                          setState(() {
+                            useFile = false;
+                            selectedFile = null;
                           });
                         }
-                        Navigator.of(context).pop(); // 關閉 bottom sheet
-                        scaffoldContext.showSnackBar(
-                          const SnackBar(content: Text('筆記創建成功')),
-                        );
-                      } catch (e) {
-                        if (!mounted) return;
-                        Navigator.of(context).pop(); // 關閉載入指示器
-                        scaffoldContext.showSnackBar(
-                          SnackBar(
-                            content: Text(e.toString()),
-                            backgroundColor: Colors.red,
+                      },
+                    ),
+                    const Text('上傳 .md 檔案'),
+                    if (selectedFile != null)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: Text(
+                            selectedFile!.path.split('/').last,
+                            style: const TextStyle(fontSize: 13, color: Colors.blueGrey),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        );
-                      }
-                    },
-                    child: const Text('創建'),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: TextField(
+                    controller: contentController,
+                    decoration: const InputDecoration(
+                      labelText: '內容',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                    ),
+                    maxLines: null,
+                    expands: true,
+                    keyboardType: TextInputType.multiline,
+                    textAlignVertical: TextAlignVertical.top,
+                    enabled: !useFile,
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('取消'),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton(
+                      onPressed: () async {
+                        final title = titleController.text.trim();
+                        final content = contentController.text.trim();
+                        if (title.isEmpty) {
+                          scaffoldContext.showSnackBar(
+                            const SnackBar(
+                              content: Text('請輸入標題'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+                        if (selectedFolder == null) {
+                          scaffoldContext.showSnackBar(
+                            const SnackBar(
+                              content: Text('請選擇資料夾'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+                        if (!useFile && content.isEmpty) {
+                          scaffoldContext.showSnackBar(
+                            const SnackBar(
+                              content: Text('請輸入內容或選擇檔案'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+                        if (useFile && selectedFile == null) {
+                          scaffoldContext.showSnackBar(
+                            const SnackBar(
+                              content: Text('請選擇 .md 檔案'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+                        try {
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (context) => const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                          final newNote = await _apiService.createNote(
+                            folderId: selectedFolder!.id,
+                            title: title,
+                            content: !useFile ? content : null,
+                            file: useFile ? selectedFile : null,
+                          );
+                          if (!mounted) return;
+                          if (_currentFolderId == selectedFolder!.id.toString()) {
+                            setState(() {
+                              _currentNotes.insert(0, {
+                                'id': newNote['id'],
+                                'title': newNote['title'],
+                                'created_at': newNote['created_at'],
+                              });
+                            });
+                          }
+                          Navigator.of(context).pop(); // 關閉 bottom sheet
+                          scaffoldContext.showSnackBar(
+                            const SnackBar(content: Text('筆記創建成功')),
+                          );
+                        } catch (e) {
+                          if (!mounted) return;
+                          Navigator.of(context).pop(); // 關閉載入指示器
+                          scaffoldContext.showSnackBar(
+                            SnackBar(
+                              content: Text(e.toString()),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      },
+                      child: const Text('創建'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -751,115 +813,175 @@ class _HomePageState extends State<HomePage> {
     final titleController = TextEditingController(text: note['title'] as String);
     final contentController = TextEditingController(text: note['content'] as String);
     final scaffoldContext = ScaffoldMessenger.of(context);
+    File? selectedFile;
+    bool useFile = false;
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.95,
-        decoration: BoxDecoration(
-          color: Theme.of(context).dialogBackgroundColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: 16, right: 16, top: 24,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => Container(
+          height: MediaQuery.of(context).size.height * 0.95,
+          decoration: BoxDecoration(
+            color: Theme.of(context).dialogBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.max,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('編輯筆記', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 24),
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(
-                  labelText: '標題',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: TextField(
-                  controller: contentController,
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16, right: 16, top: 24,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.max,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('編輯筆記', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: titleController,
                   decoration: const InputDecoration(
-                    labelText: '內容',
+                    labelText: '標題',
                     border: OutlineInputBorder(),
-                    alignLabelWithHint: true,
                   ),
-                  maxLines: null,
-                  expands: true,
-                  keyboardType: TextInputType.multiline,
-                  textAlignVertical: TextAlignVertical.top,
                 ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('取消'),
-                  ),
-                  const SizedBox(width: 16),
-                  ElevatedButton(
-                    onPressed: () async {
-                      final title = titleController.text.trim();
-                      final content = contentController.text.trim();
-                      if (title.isEmpty) {
-                        scaffoldContext.showSnackBar(
-                          const SnackBar(
-                            content: Text('請輸入標題'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                        return;
-                      }
-                      try {
-                        showDialog(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (context) => const Center(
-                            child: CircularProgressIndicator(),
-                          ),
-                        );
-                        final updatedNote = await _apiService.updateNote(
-                          noteId: note['id'] as int,
-                          title: title,
-                          content: content,
-                        );
-                        if (!mounted) return;
-                        setState(() {
-                          _selectedNote = updatedNote;
-                          // 同步更新 _currentNotes
-                          final idx = _currentNotes.indexWhere((n) => n['id'] == updatedNote['id']);
-                          if (idx != -1) {
-                            _currentNotes[idx]['title'] = updatedNote['title'];
-                            _currentNotes[idx]['created_at'] = updatedNote['created_at'];
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: useFile,
+                      onChanged: (v) async {
+                        if (v == true) {
+                          FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['md']);
+                          if (result != null && result.files.single.path != null) {
+                            setState(() {
+                              selectedFile = File(result.files.single.path!);
+                              useFile = true;
+                            });
                           }
-                        });
-                        Navigator.of(context).pop(); // 關閉 loading
-                        Navigator.of(context).pop(); // 關閉 bottom sheet
-                        scaffoldContext.showSnackBar(
-                          const SnackBar(content: Text('筆記已更新')),
-                        );
-                      } catch (e) {
-                        if (!mounted) return;
-                        Navigator.of(context).pop(); // 關閉 loading
-                        scaffoldContext.showSnackBar(
-                          SnackBar(
-                            content: Text(e.toString()),
-                            backgroundColor: Colors.red,
+                        } else {
+                          setState(() {
+                            useFile = false;
+                            selectedFile = null;
+                          });
+                        }
+                      },
+                    ),
+                    const Text('上傳 .md 檔案'),
+                    if (selectedFile != null)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: Text(
+                            selectedFile!.path.split('/').last,
+                            style: const TextStyle(fontSize: 13, color: Colors.blueGrey),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        );
-                      }
-                    },
-                    child: const Text('儲存'),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: TextField(
+                    controller: contentController,
+                    decoration: const InputDecoration(
+                      labelText: '內容',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                    ),
+                    maxLines: null,
+                    expands: true,
+                    keyboardType: TextInputType.multiline,
+                    textAlignVertical: TextAlignVertical.top,
+                    enabled: !useFile,
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('取消'),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton(
+                      onPressed: () async {
+                        final title = titleController.text.trim();
+                        final content = contentController.text.trim();
+                        if (title.isEmpty) {
+                          scaffoldContext.showSnackBar(
+                            const SnackBar(
+                              content: Text('請輸入標題'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+                        if (!useFile && content.isEmpty) {
+                          scaffoldContext.showSnackBar(
+                            const SnackBar(
+                              content: Text('請輸入內容或選擇檔案'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+                        if (useFile && selectedFile == null) {
+                          scaffoldContext.showSnackBar(
+                            const SnackBar(
+                              content: Text('請選擇 .md 檔案'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+                        try {
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (context) => const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                          final updatedNote = await _apiService.updateNote(
+                            noteId: note['id'] as int,
+                            title: title,
+                            content: !useFile ? content : null,
+                            file: useFile ? selectedFile : null,
+                          );
+                          if (!mounted) return;
+                          setState(() {
+                            _selectedNote = updatedNote;
+                            // 同步更新 _currentNotes
+                            final idx = _currentNotes.indexWhere((n) => n['id'] == updatedNote['id']);
+                            if (idx != -1) {
+                              _currentNotes[idx]['title'] = updatedNote['title'];
+                              _currentNotes[idx]['created_at'] = updatedNote['created_at'];
+                            }
+                          });
+                          Navigator.of(context).pop(); // 關閉 loading
+                          Navigator.of(context).pop(); // 關閉 bottom sheet
+                          scaffoldContext.showSnackBar(
+                            const SnackBar(content: Text('筆記已更新')),
+                          );
+                        } catch (e) {
+                          if (!mounted) return;
+                          Navigator.of(context).pop(); // 關閉 loading
+                          scaffoldContext.showSnackBar(
+                            SnackBar(
+                              content: Text(e.toString()),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      },
+                      child: const Text('儲存'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
