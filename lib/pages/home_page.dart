@@ -9,6 +9,8 @@ import 'package:flutter_html/flutter_html.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:markdown_toolbar/markdown_toolbar.dart';
+import 'package:window_manager/window_manager.dart';
+import 'dart:ui';
 
 // 新增：Dialog 內容 StatefulWidget
 class NoteEditDialog extends StatefulWidget {
@@ -525,6 +527,8 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = Theme.of(context).platform == TargetPlatform.windows;
+
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: Colors.white,
@@ -532,7 +536,7 @@ class _HomePageState extends State<HomePage> {
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         title: Text(_currentFolderName.isEmpty ? '雲端筆記' : _currentFolderName),
-        leading: IconButton(
+        leading: isDesktop ? null : IconButton(
           icon: const Icon(Icons.menu),
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
@@ -610,7 +614,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      drawer: Drawer(
+      drawer: isDesktop ? null : Drawer(
         child: Column(
           children: [
             Container(
@@ -640,17 +644,71 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
       body: SafeArea(
-        child: Container(
-          color: Colors.white,
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : buildNoteContent(),
-        ),
+        child: isDesktop
+            ? Row(
+                children: [
+                  Container(
+                    width: 220,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      border: Border(
+                        right: BorderSide(
+                          color: Colors.grey[300]!,
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          height: 48,
+                          color: Theme.of(context).primaryColor,
+                          alignment: Alignment.center,
+                          child: const Text(
+                            '雲端筆記',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: _isLoading
+                              ? const Center(child: CircularProgressIndicator())
+                              : SingleChildScrollView(
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(left: 16.0),
+                                    child: _buildFolderTree(_folders),
+                                  ),
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Container(
+                      color: Colors.white,
+                      child: _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : buildNoteContent(),
+                    ),
+                  ),
+                ],
+              )
+            : Container(
+                color: Colors.white,
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : buildNoteContent(),
+              ),
       ),
     );
   }
 
   Widget _buildFolderTree(List<Folder> folders, {double indent = 0}) {
+    final isDesktop = Theme.of(context).platform == TargetPlatform.windows;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: folders.map((folder) {
@@ -662,7 +720,10 @@ class _HomePageState extends State<HomePage> {
               child: InkWell(
                 onTap: () {
                   _loadFolderNotes(folder.id);
-                  Navigator.of(context).pop();
+                  // 只在非桌面版（使用 Drawer）時關閉抽屜
+                  if (!isDesktop) {
+                    Navigator.of(context).pop();
+                  }
                 },
                 child: Container(
                   padding: EdgeInsets.only(

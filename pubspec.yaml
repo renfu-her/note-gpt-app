@@ -22,6 +22,7 @@ dependencies:
   flutter_launcher_icons: ^0.14.3
   file_picker: ^10.1.2
   markdown_toolbar: ^0.5.0
+  window_manager: ^0.3.8
 
 dev_dependencies:
   flutter_test:

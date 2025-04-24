@@ -3,15 +3,28 @@ import 'package:flutter/services.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
 import 'services/api_service.dart';
+import 'package:window_manager/window_manager.dart';
+import 'dart:io';
 
-Future<void> main() async {
-  try {
-    WidgetsFlutterBinding.ensureInitialized();
-    runApp(const MyApp());
-  } catch (e) {
-    debugPrint('初始化錯誤: $e');
-    rethrow;
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // 初始化 window_manager
+  if (Platform.isWindows) {
+    await windowManager.ensureInitialized();
+    WindowOptions windowOptions = const WindowOptions(
+      size: Size(1280, 800),
+      center: true,
+      backgroundColor: Colors.transparent,
+      skipTaskbar: false,
+      titleBarStyle: TitleBarStyle.normal,
+    );
+    await windowManager.waitUntilReadyToShow(windowOptions);
+    await windowManager.setPreventClose(true);
+    await windowManager.maximize();
   }
+
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
