@@ -885,7 +885,7 @@ class _HomePageState extends State<HomePage> {
                   child: TextField(
                     controller: contentController,
                     decoration: const InputDecoration(
-                      labelText: '內容',
+                      labelText: '內容（Markdown 格式）',
                       border: OutlineInputBorder(),
                       alignLabelWithHint: true,
                     ),
