@@ -583,14 +583,123 @@ class _HomePageState extends State<HomePage> {
         ),
         actions: [
           if (_currentFolderName.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.note_add),
-              onPressed: () => _showCreateNoteDialog(context),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) async {
+                switch (value) {
+                  case 'new_note':
+                    _showCreateNoteDialog(context);
+                    break;
+                  case 'new_folder':
+                    _showCreateFolderDialog(context);
+                    break;
+                  case 'delete_folder':
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('確認刪除'),
+                        content: Text('確定要刪除「$_currentFolderName」資料夾嗎？\n此操作無法復原。'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('取消'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.red,
+                            ),
+                            child: const Text('刪除'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm != true) return;
+
+                    try {
+                      // 顯示載入指示器
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => const Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+
+                      await _apiService.deleteFolder(int.parse(_currentFolderId));
+                      
+                      if (!mounted) return;
+                      
+                      // 關閉載入指示器
+                      Navigator.pop(context);
+                      
+                      // 清空當前資料夾
+                      setState(() {
+                        _currentFolderId = '';
+                        _currentFolderName = '';
+                        _currentNotes = [];
+                        _selectedNote = null;
+                      });
+                      
+                      // 重新載入資料夾列表
+                      await _loadFolders();
+                      
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('資料夾已刪除')),
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      
+                      // 關閉載入指示器
+                      Navigator.pop(context);
+                      
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(e.toString()),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem<String>(
+                  value: 'new_note',
+                  child: Row(
+                    children: [
+                      Icon(Icons.note_add, color: Colors.blue),
+                      SizedBox(width: 12),
+                      Text('新增筆記'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'new_folder',
+                  child: Row(
+                    children: [
+                      Icon(Icons.create_new_folder, color: Colors.blue),
+                      SizedBox(width: 12),
+                      Text('新增資料夾'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'delete_folder',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_forever, color: Colors.red),
+                      const SizedBox(width: 12),
+                      Text(
+                        '刪除資料夾',
+                        style: TextStyle(color: Colors.red[700]),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          IconButton(
-            icon: const Icon(Icons.create_new_folder),
-            onPressed: () => _showCreateFolderDialog(context),
-          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
