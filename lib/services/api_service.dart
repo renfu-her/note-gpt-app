@@ -288,26 +288,46 @@ class ApiService {
     File? file,
   }) async {
     try {
-      final formData = FormData.fromMap({
-        'title': title,
-        if (content != null) 'content': content,
-        if (file != null)
+      if (file != null) {
+        final formData = FormData.fromMap({
+          'title': title,
+          if (content != null) 'content': content,
           'file': await MultipartFile.fromFile(file.path, filename: file.path.split('/').last),
-      });
-      final response = await _dio.put(
-        '/notes/$noteId',
-        data: formData,
-        options: Options(contentType: 'multipart/form-data'),
-      );
-      if (response.data['error'] != null) {
-        throw response.data['message'];
+        });
+        final response = await _dio.post(
+          '/notes/$noteId',
+          data: formData,
+          options: Options(contentType: 'multipart/form-data'),
+        );
+        if (response.data['error'] != null) {
+          throw response.data['message'];
+        }
+        return {
+          'id': response.data['data']['id'] as int,
+          'title': response.data['data']['title'] as String,
+          'content': response.data['data']['content'] as String,
+          'created_at': DateTime.parse(response.data['data']['created_at']),
+        };
+      } else {
+        final data = {
+          'title': title,
+          if (content != null) 'content': content,
+        };
+        final response = await _dio.post(
+          '/notes/$noteId',
+          data: data,
+          options: Options(contentType: 'application/json'),
+        );
+        if (response.data['error'] != null) {
+          throw response.data['message'];
+        }
+        return {
+          'id': response.data['data']['id'] as int,
+          'title': response.data['data']['title'] as String,
+          'content': response.data['data']['content'] as String,
+          'created_at': DateTime.parse(response.data['data']['created_at']),
+        };
       }
-      return {
-        'id': response.data['data']['id'] as int,
-        'title': response.data['data']['title'] as String,
-        'content': response.data['data']['content'] as String,
-        'created_at': DateTime.parse(response.data['data']['created_at']),
-      };
     } catch (e) {
       if (e is DioException && e.response?.data['message'] != null) {
         throw e.response?.data['message'];

@@ -8,6 +8,7 @@ import 'package:markdown/markdown.dart' as md;
 import 'package:flutter_html/flutter_html.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
+import 'package:markdown_toolbar/markdown_toolbar.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
@@ -28,6 +29,7 @@ class _HomePageState extends State<HomePage> {
   List<Folder> _folders = [];
   bool _isLoading = false;
   bool _isLoadingNote = false;
+  final FocusNode contentFocusNode = FocusNode();
 
   @override
   void initState() {
@@ -598,6 +600,7 @@ class _HomePageState extends State<HomePage> {
         : null;
     final titleController = TextEditingController();
     final contentController = TextEditingController();
+    final contentFocusNode = FocusNode();
     final scaffoldContext = ScaffoldMessenger.of(context);
     final flatFolders = _flattenFolders(_folders);
     File? selectedFile;
@@ -692,19 +695,52 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const SizedBox(height: 8),
                 Expanded(
-                  child: TextField(
-                    controller: contentController,
-                    decoration: const InputDecoration(
-                      labelText: '內容',
-                      border: OutlineInputBorder(),
-                      alignLabelWithHint: true,
-                    ),
-                    maxLines: null,
-                    expands: true,
-                    keyboardType: TextInputType.multiline,
-                    textAlignVertical: TextAlignVertical.top,
-                    enabled: !useFile,
-                  ),
+                  child: !useFile
+                      ? Column(
+                          children: [
+                            MarkdownToolbar(
+                              useIncludedTextField: false,
+                              controller: contentController,
+                              focusNode: contentFocusNode,
+                              iconSize: 20,
+                              height: 36,
+                              spacing: 2,
+                              runSpacing: 0,
+                              backgroundColor: Colors.grey[100]!,
+                              iconColor: Colors.blueGrey,
+                            ),
+                            const SizedBox(height: 4),
+                            Expanded(
+                              child: TextField(
+                                controller: contentController,
+                                focusNode: contentFocusNode,
+                                decoration: const InputDecoration(
+                                  labelText: '內容（Markdown 格式）',
+                                  border: OutlineInputBorder(),
+                                  alignLabelWithHint: true,
+                                ),
+                                maxLines: null,
+                                expands: true,
+                                keyboardType: TextInputType.multiline,
+                                textAlignVertical: TextAlignVertical.top,
+                                enabled: true,
+                              ),
+                            ),
+                          ],
+                        )
+                      : TextField(
+                          controller: contentController,
+                          decoration: const InputDecoration(
+                            labelText: '內容（Markdown 格式）',
+                            border: OutlineInputBorder(),
+                            alignLabelWithHint: true,
+                          ),
+                          maxLines: null,
+                          expands: true,
+                          keyboardType: TextInputType.multiline,
+                          textAlignVertical: TextAlignVertical.top,
+                          enabled: false,
+                        ),
                 ),
                 const SizedBox(height: 24),
                 Row(
@@ -804,14 +840,16 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
-    // 清理控制器
+    // 關閉 bottom sheet 後釋放 controller
     titleController.dispose();
     contentController.dispose();
+    contentFocusNode.dispose();
   }
 
   void _showEditNoteDialog(BuildContext context, Map<String, dynamic> note) async {
     final titleController = TextEditingController(text: note['title'] as String);
     final contentController = TextEditingController(text: note['content'] as String);
+    final contentFocusNode = FocusNode();
     final scaffoldContext = ScaffoldMessenger.of(context);
     File? selectedFile;
     bool useFile = false;
@@ -882,19 +920,52 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const SizedBox(height: 8),
                 Expanded(
-                  child: TextField(
-                    controller: contentController,
-                    decoration: const InputDecoration(
-                      labelText: '內容（Markdown 格式）',
-                      border: OutlineInputBorder(),
-                      alignLabelWithHint: true,
-                    ),
-                    maxLines: null,
-                    expands: true,
-                    keyboardType: TextInputType.multiline,
-                    textAlignVertical: TextAlignVertical.top,
-                    enabled: !useFile,
-                  ),
+                  child: !useFile
+                      ? Column(
+                          children: [
+                            MarkdownToolbar(
+                              useIncludedTextField: false,
+                              controller: contentController,
+                              focusNode: contentFocusNode,
+                              iconSize: 20,
+                              height: 36,
+                              spacing: 2,
+                              runSpacing: 0,
+                              backgroundColor: Colors.grey[100]!,
+                              iconColor: Colors.blueGrey,
+                            ),
+                            const SizedBox(height: 4),
+                            Expanded(
+                              child: TextField(
+                                controller: contentController,
+                                focusNode: contentFocusNode,
+                                decoration: const InputDecoration(
+                                  labelText: '內容（Markdown 格式）',
+                                  border: OutlineInputBorder(),
+                                  alignLabelWithHint: true,
+                                ),
+                                maxLines: null,
+                                expands: true,
+                                keyboardType: TextInputType.multiline,
+                                textAlignVertical: TextAlignVertical.top,
+                                enabled: true,
+                              ),
+                            ),
+                          ],
+                        )
+                      : TextField(
+                          controller: contentController,
+                          decoration: const InputDecoration(
+                            labelText: '內容（Markdown 格式）',
+                            border: OutlineInputBorder(),
+                            alignLabelWithHint: true,
+                          ),
+                          maxLines: null,
+                          expands: true,
+                          keyboardType: TextInputType.multiline,
+                          textAlignVertical: TextAlignVertical.top,
+                          enabled: false,
+                        ),
                 ),
                 const SizedBox(height: 24),
                 Row(
@@ -960,7 +1031,7 @@ class _HomePageState extends State<HomePage> {
                               _currentNotes[idx]['created_at'] = updatedNote['created_at'];
                             }
                           });
-                          Navigator.of(context).pop(); // 關閉 loading
+                          Navigator.of(context).pop(); // 關閉 loading'
                           Navigator.of(context).pop(); // 關閉 bottom sheet
                           scaffoldContext.showSnackBar(
                             const SnackBar(content: Text('筆記已更新')),
@@ -986,7 +1057,9 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
+    // 關閉 bottom sheet 後釋放 controller
     titleController.dispose();
     contentController.dispose();
+    contentFocusNode.dispose();
   }
 } 
