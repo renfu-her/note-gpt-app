@@ -613,17 +613,16 @@ class _HomePageState extends State<HomePage> {
       drawer: Drawer(
         child: Column(
           children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor,
-              ),
-              child: const Center(
-                child: Text(
-                  '雲端筆記',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                  ),
+            Container(
+              height: 48,
+              color: Theme.of(context).primaryColor,
+              alignment: Alignment.center,
+              child: const Text(
+                '雲端筆記',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ),
@@ -661,7 +660,10 @@ class _HomePageState extends State<HomePage> {
             Container(
               margin: const EdgeInsets.symmetric(vertical: 2),
               child: InkWell(
-                onTap: () => _loadFolderNotes(folder.id),
+                onTap: () {
+                  _loadFolderNotes(folder.id);
+                  Navigator.of(context).pop();
+                },
                 child: Container(
                   padding: EdgeInsets.only(
                     left: indent,
