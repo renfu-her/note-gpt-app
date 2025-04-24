@@ -65,6 +65,7 @@ class _NoteEditDialogState extends State<NoteEditDialog> {
   @override
   Widget build(BuildContext context) {
     final List<Map<String, dynamic>> flatFolders = [];
+    final isDesktop = Theme.of(context).platform == TargetPlatform.windows;
     
     void flattenFolders(List<Folder> folders, int level) {
       for (final folder in folders) {
@@ -81,10 +82,24 @@ class _NoteEditDialogState extends State<NoteEditDialog> {
     flattenFolders(widget.folders, 0);
     
     return Container(
-      height: MediaQuery.of(context).size.height * 0.95,
+      height: isDesktop 
+          ? MediaQuery.of(context).size.height * 0.9  // Windows 版本使用 90% 的螢幕高度
+          : MediaQuery.of(context).size.height * 0.95,
+      width: isDesktop 
+          ? MediaQuery.of(context).size.width * 0.8   // Windows 版本使用 80% 的螢幕寬度
+          : null,
+      margin: isDesktop
+          ? EdgeInsets.symmetric(
+              horizontal: MediaQuery.of(context).size.width * 0.1,
+              vertical: MediaQuery.of(context).size.height * 0.05,
+            )
+          : null,
       decoration: BoxDecoration(
         color: Theme.of(context).dialogBackgroundColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(
+          top: const Radius.circular(24),
+          bottom: isDesktop ? const Radius.circular(24) : Radius.zero,
+        ),
       ),
       child: Column(
         children: [
@@ -899,147 +914,301 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _showCreateNoteDialog(BuildContext context) async {
     final scaffoldContext = ScaffoldMessenger.of(context);
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => NoteEditDialog(
-        title: '新增筆記',
-        isEdit: false,
-        folders: _folders,
-        selectedFolder: _folders.isNotEmpty
-            ? _folders.firstWhere(
-                (f) => f.id.toString() == _currentFolderId,
-                orElse: () => _folders.first,
-              )
-            : null,
-        onSave: (title, content, file, folder) async {
-          if (title.isEmpty || folder == null) {
-            scaffoldContext.showSnackBar(
-              const SnackBar(
-                content: Text('請輸入標題並選擇資料夾'),
-                backgroundColor: Colors.red,
-              ),
-            );
-            return;
-          }
+    final isDesktop = Theme.of(context).platform == TargetPlatform.windows;
 
-          try {
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) => const Center(
-                child: CircularProgressIndicator(),
-              ),
-            );
+    if (isDesktop) {
+      // Windows 版本使用普通對話框
+      await showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          backgroundColor: Colors.transparent,
+          child: NoteEditDialog(
+            title: '新增筆記',
+            isEdit: false,
+            folders: _folders,
+            selectedFolder: _folders.isNotEmpty
+                ? _folders.firstWhere(
+                    (f) => f.id.toString() == _currentFolderId,
+                    orElse: () => _folders.first,
+                  )
+                : null,
+            onSave: (title, content, file, folder) async {
+              if (title.isEmpty || folder == null) {
+                scaffoldContext.showSnackBar(
+                  const SnackBar(
+                    content: Text('請輸入標題並選擇資料夾'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
 
-            final newNote = await _apiService.createNote(
-              folderId: folder.id,
-              title: title,
-              content: file == null ? content : null,
-              file: file,
-            );
+              try {
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
 
-            if (!mounted) return;
+                final newNote = await _apiService.createNote(
+                  folderId: folder.id,
+                  title: title,
+                  content: file == null ? content : null,
+                  file: file,
+                );
 
-            if (_currentFolderId == folder.id.toString()) {
-              setState(() {
-                _currentNotes.insert(0, {
-                  'id': newNote['id'],
-                  'title': newNote['title'],
-                  'created_at': newNote['created_at'],
-                });
-              });
+                if (!mounted) return;
+
+                if (_currentFolderId == folder.id.toString()) {
+                  setState(() {
+                    _currentNotes.insert(0, {
+                      'id': newNote['id'],
+                      'title': newNote['title'],
+                      'created_at': newNote['created_at'],
+                    });
+                  });
+                }
+
+                Navigator.of(context).pop(); // 關閉載入指示器
+                Navigator.of(context).pop(); // 關閉對話框
+                scaffoldContext.showSnackBar(
+                  const SnackBar(content: Text('筆記創建成功')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                Navigator.of(context).pop(); // 關閉載入指示器
+                scaffoldContext.showSnackBar(
+                  SnackBar(
+                    content: Text(e.toString()),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+          ),
+        ),
+      );
+    } else {
+      // 手機版使用底部彈出
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => NoteEditDialog(
+          title: '新增筆記',
+          isEdit: false,
+          folders: _folders,
+          selectedFolder: _folders.isNotEmpty
+              ? _folders.firstWhere(
+                  (f) => f.id.toString() == _currentFolderId,
+                  orElse: () => _folders.first,
+                )
+              : null,
+          onSave: (title, content, file, folder) async {
+            if (title.isEmpty || folder == null) {
+              scaffoldContext.showSnackBar(
+                const SnackBar(
+                  content: Text('請輸入標題並選擇資料夾'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
             }
 
-            Navigator.of(context).pop(); // 關閉載入指示器
-            Navigator.of(context).pop(); // 關閉 bottom sheet
-            scaffoldContext.showSnackBar(
-              const SnackBar(content: Text('筆記創建成功')),
-            );
-          } catch (e) {
-            if (!mounted) return;
-            Navigator.of(context).pop(); // 關閉載入指示器
-            scaffoldContext.showSnackBar(
-              SnackBar(
-                content: Text(e.toString()),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        },
-      ),
-    );
+            try {
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+
+              final newNote = await _apiService.createNote(
+                folderId: folder.id,
+                title: title,
+                content: file == null ? content : null,
+                file: file,
+              );
+
+              if (!mounted) return;
+
+              if (_currentFolderId == folder.id.toString()) {
+                setState(() {
+                  _currentNotes.insert(0, {
+                    'id': newNote['id'],
+                    'title': newNote['title'],
+                    'created_at': newNote['created_at'],
+                  });
+                });
+              }
+
+              Navigator.of(context).pop(); // 關閉載入指示器
+              Navigator.of(context).pop(); // 關閉 bottom sheet
+              scaffoldContext.showSnackBar(
+                const SnackBar(content: Text('筆記創建成功')),
+              );
+            } catch (e) {
+              if (!mounted) return;
+              Navigator.of(context).pop(); // 關閉載入指示器
+              scaffoldContext.showSnackBar(
+                SnackBar(
+                  content: Text(e.toString()),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          },
+        ),
+      );
+    }
   }
 
   void _showEditNoteDialog(BuildContext context, Map<String, dynamic> note) async {
     final scaffoldContext = ScaffoldMessenger.of(context);
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => NoteEditDialog(
-        title: '編輯筆記',
-        isEdit: true,
-        folders: _folders,
-        initialTitle: note['title'] as String,
-        initialContent: note['content'] as String,
-        onSave: (title, content, file, folder) async {
-          if (title.isEmpty) {
-            scaffoldContext.showSnackBar(
-              const SnackBar(
-                content: Text('請輸入標題'),
-                backgroundColor: Colors.red,
-              ),
-            );
-            return;
-          }
+    final isDesktop = Theme.of(context).platform == TargetPlatform.windows;
 
-          try {
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) => const Center(
-                child: CircularProgressIndicator(),
-              ),
-            );
-
-            final updatedNote = await _apiService.updateNote(
-              noteId: note['id'] as int,
-              title: title,
-              content: file == null ? content : null,
-              file: file,
-            );
-
-            if (!mounted) return;
-
-            setState(() {
-              _selectedNote = updatedNote;
-              // 同步更新 _currentNotes
-              final idx = _currentNotes.indexWhere((n) => n['id'] == updatedNote['id']);
-              if (idx != -1) {
-                _currentNotes[idx]['title'] = updatedNote['title'];
-                _currentNotes[idx]['created_at'] = updatedNote['created_at'];
+    if (isDesktop) {
+      // Windows 版本使用普通對話框
+      await showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          backgroundColor: Colors.transparent,
+          child: NoteEditDialog(
+            title: '編輯筆記',
+            isEdit: true,
+            folders: _folders,
+            initialTitle: note['title'] as String,
+            initialContent: note['content'] as String,
+            onSave: (title, content, file, folder) async {
+              if (title.isEmpty) {
+                scaffoldContext.showSnackBar(
+                  const SnackBar(
+                    content: Text('請輸入標題'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
               }
-            });
 
-            Navigator.of(context).pop(); // 關閉載入指示器
-            Navigator.of(context).pop(); // 關閉 bottom sheet
-            scaffoldContext.showSnackBar(
-              const SnackBar(content: Text('筆記已更新')),
-            );
-          } catch (e) {
-            if (!mounted) return;
-            Navigator.of(context).pop(); // 關閉載入指示器
-            scaffoldContext.showSnackBar(
-              SnackBar(
-                content: Text(e.toString()),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        },
-      ),
-    );
+              try {
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+
+                final updatedNote = await _apiService.updateNote(
+                  noteId: note['id'] as int,
+                  title: title,
+                  content: file == null ? content : null,
+                  file: file,
+                );
+
+                if (!mounted) return;
+
+                setState(() {
+                  _selectedNote = updatedNote;
+                  // 同步更新 _currentNotes
+                  final idx = _currentNotes.indexWhere((n) => n['id'] == updatedNote['id']);
+                  if (idx != -1) {
+                    _currentNotes[idx]['title'] = updatedNote['title'];
+                    _currentNotes[idx]['created_at'] = updatedNote['created_at'];
+                  }
+                });
+
+                Navigator.of(context).pop(); // 關閉載入指示器
+                Navigator.of(context).pop(); // 關閉對話框
+                scaffoldContext.showSnackBar(
+                  const SnackBar(content: Text('筆記已更新')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                Navigator.of(context).pop(); // 關閉載入指示器
+                scaffoldContext.showSnackBar(
+                  SnackBar(
+                    content: Text(e.toString()),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+          ),
+        ),
+      );
+    } else {
+      // 手機版使用底部彈出
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => NoteEditDialog(
+          title: '編輯筆記',
+          isEdit: true,
+          folders: _folders,
+          initialTitle: note['title'] as String,
+          initialContent: note['content'] as String,
+          onSave: (title, content, file, folder) async {
+            if (title.isEmpty) {
+              scaffoldContext.showSnackBar(
+                const SnackBar(
+                  content: Text('請輸入標題'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
+            }
+
+            try {
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+
+              final updatedNote = await _apiService.updateNote(
+                noteId: note['id'] as int,
+                title: title,
+                content: file == null ? content : null,
+                file: file,
+              );
+
+              if (!mounted) return;
+
+              setState(() {
+                _selectedNote = updatedNote;
+                // 同步更新 _currentNotes
+                final idx = _currentNotes.indexWhere((n) => n['id'] == updatedNote['id']);
+                if (idx != -1) {
+                  _currentNotes[idx]['title'] = updatedNote['title'];
+                  _currentNotes[idx]['created_at'] = updatedNote['created_at'];
+                }
+              });
+
+              Navigator.of(context).pop(); // 關閉載入指示器
+              Navigator.of(context).pop(); // 關閉 bottom sheet
+              scaffoldContext.showSnackBar(
+                const SnackBar(content: Text('筆記已更新')),
+              );
+            } catch (e) {
+              if (!mounted) return;
+              Navigator.of(context).pop(); // 關閉載入指示器
+              scaffoldContext.showSnackBar(
+                SnackBar(
+                  content: Text(e.toString()),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          },
+        ),
+      );
+    }
   }
 } 
