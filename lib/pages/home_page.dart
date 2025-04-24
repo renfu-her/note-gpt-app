@@ -10,6 +10,264 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:markdown_toolbar/markdown_toolbar.dart';
 
+// 新增：Dialog 內容 StatefulWidget
+class NoteEditDialog extends StatefulWidget {
+  final String title;
+  final String? initialTitle;
+  final String? initialContent;
+  final bool isEdit;
+  final Function(String, String, File?, Folder?) onSave;
+  final List<Folder> folders;
+  final Folder? selectedFolder;
+
+  const NoteEditDialog({
+    Key? key,
+    required this.title,
+    this.initialTitle,
+    this.initialContent,
+    required this.isEdit,
+    required this.onSave,
+    required this.folders,
+    this.selectedFolder,
+  }) : super(key: key);
+
+  @override
+  State<NoteEditDialog> createState() => _NoteEditDialogState();
+}
+
+class _NoteEditDialogState extends State<NoteEditDialog> {
+  late TextEditingController titleController;
+  late TextEditingController contentController;
+  late FocusNode contentFocusNode;
+  File? selectedFile;
+  bool useFile = false;
+  Folder? selectedFolder;
+
+  @override
+  void initState() {
+    super.initState();
+    titleController = TextEditingController(text: widget.initialTitle ?? '');
+    contentController = TextEditingController(text: widget.initialContent ?? '');
+    contentFocusNode = FocusNode();
+    selectedFolder = widget.selectedFolder ?? (widget.folders.isNotEmpty ? widget.folders.first : null);
+  }
+
+  @override
+  void dispose() {
+    titleController.dispose();
+    contentController.dispose();
+    contentFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<Map<String, dynamic>> flatFolders = [];
+    
+    void flattenFolders(List<Folder> folders, int level) {
+      for (final folder in folders) {
+        flatFolders.add({
+          'folder': folder,
+          'indent': level,
+        });
+        if (folder.children.isNotEmpty) {
+          flattenFolders(folder.children, level + 1);
+        }
+      }
+    }
+    
+    flattenFolders(widget.folders, 0);
+    
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.95,
+      decoration: BoxDecoration(
+        color: Theme.of(context).dialogBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 24),
+                if (!widget.isEdit) ...[
+                  if (flatFolders.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 16),
+                      child: Text(
+                        '請先創建資料夾',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    )
+                  else
+                    DropdownButtonFormField<Folder>(
+                      value: selectedFolder,
+                      decoration: const InputDecoration(
+                        labelText: '選擇資料夾',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: flatFolders.map((item) {
+                        final folder = item['folder'] as Folder;
+                        final indent = item['indent'] as int;
+                        return DropdownMenuItem<Folder>(
+                          value: folder,
+                          child: Padding(
+                            padding: EdgeInsets.only(left: indent * 20.0),
+                            child: Text(folder.name),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (folder) {
+                        setState(() {
+                          selectedFolder = folder;
+                        });
+                      },
+                    ),
+                  const SizedBox(height: 16),
+                ],
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(
+                    labelText: '標題',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: useFile,
+                      onChanged: (v) async {
+                        if (v == true) {
+                          FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['md']);
+                          if (result != null && result.files.single.path != null) {
+                            setState(() {
+                              selectedFile = File(result.files.single.path!);
+                              useFile = true;
+                            });
+                          }
+                        } else {
+                          setState(() {
+                            useFile = false;
+                            selectedFile = null;
+                          });
+                        }
+                      },
+                    ),
+                    const Text('上傳 .md 檔案'),
+                    if (selectedFile != null)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: Text(
+                            selectedFile!.path.split('/').last,
+                            style: const TextStyle(fontSize: 13, color: Colors.blueGrey),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Container(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
+              child: Column(
+                children: [
+                  if (!useFile)
+                    MarkdownToolbar(
+                      useIncludedTextField: false,
+                      controller: contentController,
+                      focusNode: contentFocusNode,
+                      iconSize: 20,
+                      height: 36,
+                      spacing: 2,
+                      runSpacing: 0,
+                      backgroundColor: Colors.grey[100]!,
+                      iconColor: Colors.blueGrey,
+                    ),
+                  const SizedBox(height: 4),
+                  Expanded(
+                    child: TextField(
+                      controller: contentController,
+                      focusNode: contentFocusNode,
+                      decoration: const InputDecoration(
+                        labelText: '內容（Markdown 格式）',
+                        border: OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                      ),
+                      maxLines: null,
+                      expands: true,
+                      keyboardType: TextInputType.multiline,
+                      textAlignVertical: TextAlignVertical.top,
+                      enabled: !useFile,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('取消'),
+                      ),
+                      const SizedBox(width: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          final title = titleController.text.trim();
+                          final content = contentController.text.trim();
+                          if (title.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('請輸入標題'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
+                          if (!useFile && content.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('請輸入內容或選擇檔案'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
+                          if (useFile && selectedFile == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('請選擇 .md 檔案'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
+                          widget.onSave(title, content, useFile ? selectedFile : null, selectedFolder);
+                        },
+                        child: Text(widget.isEdit ? '儲存' : '創建'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
 
@@ -576,490 +834,149 @@ class _HomePageState extends State<HomePage> {
     descriptionController.dispose();
   }
 
-  // 展平成帶縮排的資料夾清單
-  List<Map<String, dynamic>> _flattenFolders(List<Folder> folders, {int level = 0}) {
-    List<Map<String, dynamic>> result = [];
-    for (final folder in folders) {
-      result.add({
-        'folder': folder,
-        'indent': level,
-      });
-      if (folder.children.isNotEmpty) {
-        result.addAll(_flattenFolders(folder.children, level: level + 1));
-      }
-    }
-    return result;
-  }
-
   Future<void> _showCreateNoteDialog(BuildContext context) async {
-    Folder? selectedFolder = _folders.isNotEmpty
-        ? _folders.firstWhere(
-            (f) => f.id.toString() == _currentFolderId,
-            orElse: () => _folders.first,
-          )
-        : null;
-    final titleController = TextEditingController();
-    final contentController = TextEditingController();
-    final contentFocusNode = FocusNode();
     final scaffoldContext = ScaffoldMessenger.of(context);
-    final flatFolders = _flattenFolders(_folders);
-    File? selectedFile;
-    bool useFile = false;
-
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => Container(
-          height: MediaQuery.of(context).size.height * 0.95,
-          decoration: BoxDecoration(
-            color: Theme.of(context).dialogBackgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 16, right: 16, top: 24,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.max,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('新增筆記', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 24),
-                DropdownButtonFormField<Folder>(
-                  value: selectedFolder,
-                  decoration: const InputDecoration(
-                    labelText: '選擇資料夾',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: flatFolders.map((item) {
-                    final folder = item['folder'] as Folder;
-                    final indent = item['indent'] as int;
-                    return DropdownMenuItem<Folder>(
-                      value: folder,
-                      child: Padding(
-                        padding: EdgeInsets.only(left: indent * 20.0),
-                        child: Text(folder.name),
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (folder) {
-                    selectedFolder = folder;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: '標題',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Checkbox(
-                      value: useFile,
-                      onChanged: (v) async {
-                        if (v == true) {
-                          FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['md']);
-                          if (result != null && result.files.single.path != null) {
-                            setState(() {
-                              selectedFile = File(result.files.single.path!);
-                              useFile = true;
-                            });
-                          }
-                        } else {
-                          setState(() {
-                            useFile = false;
-                            selectedFile = null;
-                          });
-                        }
-                      },
-                    ),
-                    const Text('上傳 .md 檔案'),
-                    if (selectedFile != null)
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 8.0),
-                          child: Text(
-                            selectedFile!.path.split('/').last,
-                            style: const TextStyle(fontSize: 13, color: Colors.blueGrey),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: !useFile
-                      ? Column(
-                          children: [
-                            MarkdownToolbar(
-                              useIncludedTextField: false,
-                              controller: contentController,
-                              focusNode: contentFocusNode,
-                              iconSize: 20,
-                              height: 36,
-                              spacing: 2,
-                              runSpacing: 0,
-                              backgroundColor: Colors.grey[100]!,
-                              iconColor: Colors.blueGrey,
-                            ),
-                            const SizedBox(height: 4),
-                            Expanded(
-                              child: TextField(
-                                controller: contentController,
-                                focusNode: contentFocusNode,
-                                decoration: const InputDecoration(
-                                  labelText: '內容（Markdown 格式）',
-                                  border: OutlineInputBorder(),
-                                  alignLabelWithHint: true,
-                                ),
-                                maxLines: null,
-                                expands: true,
-                                keyboardType: TextInputType.multiline,
-                                textAlignVertical: TextAlignVertical.top,
-                                enabled: true,
-                              ),
-                            ),
-                          ],
-                        )
-                      : TextField(
-                          controller: contentController,
-                          decoration: const InputDecoration(
-                            labelText: '內容（Markdown 格式）',
-                            border: OutlineInputBorder(),
-                            alignLabelWithHint: true,
-                          ),
-                          maxLines: null,
-                          expands: true,
-                          keyboardType: TextInputType.multiline,
-                          textAlignVertical: TextAlignVertical.top,
-                          enabled: false,
-                        ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('取消'),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton(
-                      onPressed: () async {
-                        final title = titleController.text.trim();
-                        final content = contentController.text.trim();
-                        if (title.isEmpty) {
-                          scaffoldContext.showSnackBar(
-                            const SnackBar(
-                              content: Text('請輸入標題'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                          return;
-                        }
-                        if (selectedFolder == null) {
-                          scaffoldContext.showSnackBar(
-                            const SnackBar(
-                              content: Text('請選擇資料夾'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                          return;
-                        }
-                        if (!useFile && content.isEmpty) {
-                          scaffoldContext.showSnackBar(
-                            const SnackBar(
-                              content: Text('請輸入內容或選擇檔案'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                          return;
-                        }
-                        if (useFile && selectedFile == null) {
-                          scaffoldContext.showSnackBar(
-                            const SnackBar(
-                              content: Text('請選擇 .md 檔案'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                          return;
-                        }
-                        try {
-                          showDialog(
-                            context: context,
-                            barrierDismissible: false,
-                            builder: (context) => const Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                          );
-                          final newNote = await _apiService.createNote(
-                            folderId: selectedFolder!.id,
-                            title: title,
-                            content: !useFile ? content : null,
-                            file: useFile ? selectedFile : null,
-                          );
-                          if (!mounted) return;
-                          if (_currentFolderId == selectedFolder!.id.toString()) {
-                            setState(() {
-                              _currentNotes.insert(0, {
-                                'id': newNote['id'],
-                                'title': newNote['title'],
-                                'created_at': newNote['created_at'],
-                              });
-                            });
-                          }
-                          Navigator.of(context).pop(); // 關閉 bottom sheet
-                          scaffoldContext.showSnackBar(
-                            const SnackBar(content: Text('筆記創建成功')),
-                          );
-                        } catch (e) {
-                          if (!mounted) return;
-                          Navigator.of(context).pop(); // 關閉載入指示器
-                          scaffoldContext.showSnackBar(
-                            SnackBar(
-                              content: Text(e.toString()),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      },
-                      child: const Text('創建'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
+      builder: (context) => NoteEditDialog(
+        title: '新增筆記',
+        isEdit: false,
+        folders: _folders,
+        selectedFolder: _folders.isNotEmpty
+            ? _folders.firstWhere(
+                (f) => f.id.toString() == _currentFolderId,
+                orElse: () => _folders.first,
+              )
+            : null,
+        onSave: (title, content, file, folder) async {
+          if (title.isEmpty || folder == null) {
+            scaffoldContext.showSnackBar(
+              const SnackBar(
+                content: Text('請輸入標題並選擇資料夾'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return;
+          }
+
+          try {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => const Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+
+            final newNote = await _apiService.createNote(
+              folderId: folder.id,
+              title: title,
+              content: file == null ? content : null,
+              file: file,
+            );
+
+            if (!mounted) return;
+
+            if (_currentFolderId == folder.id.toString()) {
+              setState(() {
+                _currentNotes.insert(0, {
+                  'id': newNote['id'],
+                  'title': newNote['title'],
+                  'created_at': newNote['created_at'],
+                });
+              });
+            }
+
+            Navigator.of(context).pop(); // 關閉載入指示器
+            Navigator.of(context).pop(); // 關閉 bottom sheet
+            scaffoldContext.showSnackBar(
+              const SnackBar(content: Text('筆記創建成功')),
+            );
+          } catch (e) {
+            if (!mounted) return;
+            Navigator.of(context).pop(); // 關閉載入指示器
+            scaffoldContext.showSnackBar(
+              SnackBar(
+                content: Text(e.toString()),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        },
       ),
     );
-    // 關閉 bottom sheet 後釋放 controller
-    titleController.dispose();
-    contentController.dispose();
-    contentFocusNode.dispose();
   }
 
   void _showEditNoteDialog(BuildContext context, Map<String, dynamic> note) async {
-    final titleController = TextEditingController(text: note['title'] as String);
-    final contentController = TextEditingController(text: note['content'] as String);
-    final contentFocusNode = FocusNode();
     final scaffoldContext = ScaffoldMessenger.of(context);
-    File? selectedFile;
-    bool useFile = false;
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => Container(
-          height: MediaQuery.of(context).size.height * 0.95,
-          decoration: BoxDecoration(
-            color: Theme.of(context).dialogBackgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 16, right: 16, top: 24,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.max,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('編輯筆記', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 24),
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: '標題',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Checkbox(
-                      value: useFile,
-                      onChanged: (v) async {
-                        if (v == true) {
-                          FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['md']);
-                          if (result != null && result.files.single.path != null) {
-                            setState(() {
-                              selectedFile = File(result.files.single.path!);
-                              useFile = true;
-                            });
-                          }
-                        } else {
-                          setState(() {
-                            useFile = false;
-                            selectedFile = null;
-                          });
-                        }
-                      },
-                    ),
-                    const Text('上傳 .md 檔案'),
-                    if (selectedFile != null)
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 8.0),
-                          child: Text(
-                            selectedFile!.path.split('/').last,
-                            style: const TextStyle(fontSize: 13, color: Colors.blueGrey),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: !useFile
-                      ? Column(
-                          children: [
-                            MarkdownToolbar(
-                              useIncludedTextField: false,
-                              controller: contentController,
-                              focusNode: contentFocusNode,
-                              iconSize: 20,
-                              height: 36,
-                              spacing: 2,
-                              runSpacing: 0,
-                              backgroundColor: Colors.grey[100]!,
-                              iconColor: Colors.blueGrey,
-                            ),
-                            const SizedBox(height: 4),
-                            Expanded(
-                              child: TextField(
-                                controller: contentController,
-                                focusNode: contentFocusNode,
-                                decoration: const InputDecoration(
-                                  labelText: '內容（Markdown 格式）',
-                                  border: OutlineInputBorder(),
-                                  alignLabelWithHint: true,
-                                ),
-                                maxLines: null,
-                                expands: true,
-                                keyboardType: TextInputType.multiline,
-                                textAlignVertical: TextAlignVertical.top,
-                                enabled: true,
-                              ),
-                            ),
-                          ],
-                        )
-                      : TextField(
-                          controller: contentController,
-                          decoration: const InputDecoration(
-                            labelText: '內容（Markdown 格式）',
-                            border: OutlineInputBorder(),
-                            alignLabelWithHint: true,
-                          ),
-                          maxLines: null,
-                          expands: true,
-                          keyboardType: TextInputType.multiline,
-                          textAlignVertical: TextAlignVertical.top,
-                          enabled: false,
-                        ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('取消'),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton(
-                      onPressed: () async {
-                        final title = titleController.text.trim();
-                        final content = contentController.text.trim();
-                        if (title.isEmpty) {
-                          scaffoldContext.showSnackBar(
-                            const SnackBar(
-                              content: Text('請輸入標題'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                          return;
-                        }
-                        if (!useFile && content.isEmpty) {
-                          scaffoldContext.showSnackBar(
-                            const SnackBar(
-                              content: Text('請輸入內容或選擇檔案'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                          return;
-                        }
-                        if (useFile && selectedFile == null) {
-                          scaffoldContext.showSnackBar(
-                            const SnackBar(
-                              content: Text('請選擇 .md 檔案'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                          return;
-                        }
-                        try {
-                          showDialog(
-                            context: context,
-                            barrierDismissible: false,
-                            builder: (context) => const Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                          );
-                          final updatedNote = await _apiService.updateNote(
-                            noteId: note['id'] as int,
-                            title: title,
-                            content: !useFile ? content : null,
-                            file: useFile ? selectedFile : null,
-                          );
-                          if (!mounted) return;
-                          setState(() {
-                            _selectedNote = updatedNote;
-                            // 同步更新 _currentNotes
-                            final idx = _currentNotes.indexWhere((n) => n['id'] == updatedNote['id']);
-                            if (idx != -1) {
-                              _currentNotes[idx]['title'] = updatedNote['title'];
-                              _currentNotes[idx]['created_at'] = updatedNote['created_at'];
-                            }
-                          });
-                          Navigator.of(context).pop(); // 關閉 loading'
-                          Navigator.of(context).pop(); // 關閉 bottom sheet
-                          scaffoldContext.showSnackBar(
-                            const SnackBar(content: Text('筆記已更新')),
-                          );
-                        } catch (e) {
-                          if (!mounted) return;
-                          Navigator.of(context).pop(); // 關閉 loading
-                          scaffoldContext.showSnackBar(
-                            SnackBar(
-                              content: Text(e.toString()),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      },
-                      child: const Text('儲存'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
+      builder: (context) => NoteEditDialog(
+        title: '編輯筆記',
+        isEdit: true,
+        folders: _folders,
+        initialTitle: note['title'] as String,
+        initialContent: note['content'] as String,
+        onSave: (title, content, file, folder) async {
+          if (title.isEmpty) {
+            scaffoldContext.showSnackBar(
+              const SnackBar(
+                content: Text('請輸入標題'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return;
+          }
+
+          try {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => const Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+
+            final updatedNote = await _apiService.updateNote(
+              noteId: note['id'] as int,
+              title: title,
+              content: file == null ? content : null,
+              file: file,
+            );
+
+            if (!mounted) return;
+
+            setState(() {
+              _selectedNote = updatedNote;
+              // 同步更新 _currentNotes
+              final idx = _currentNotes.indexWhere((n) => n['id'] == updatedNote['id']);
+              if (idx != -1) {
+                _currentNotes[idx]['title'] = updatedNote['title'];
+                _currentNotes[idx]['created_at'] = updatedNote['created_at'];
+              }
+            });
+
+            Navigator.of(context).pop(); // 關閉載入指示器
+            Navigator.of(context).pop(); // 關閉 bottom sheet
+            scaffoldContext.showSnackBar(
+              const SnackBar(content: Text('筆記已更新')),
+            );
+          } catch (e) {
+            if (!mounted) return;
+            Navigator.of(context).pop(); // 關閉載入指示器
+            scaffoldContext.showSnackBar(
+              SnackBar(
+                content: Text(e.toString()),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        },
       ),
     );
-    // 關閉 bottom sheet 後釋放 controller
-    titleController.dispose();
-    contentController.dispose();
-    contentFocusNode.dispose();
   }
 } 
