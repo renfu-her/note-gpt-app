@@ -332,23 +332,28 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _loadFolderNotes(int folderId) async {
+    setState(() => _isLoading = true);
     try {
-      setState(() => _isLoading = true);
       final response = await _apiService.getFolderNotes(folderId);
-      
+      print('DEBUG: response = $response');
+
       if (!mounted) return;
       
       setState(() {
         _currentFolderId = folderId.toString();
         _currentFolderName = response['name'] as String;
         _currentNotes = List<Map<String, dynamic>>.from(response['notes']);
-        _currentNotes.sort((a, b) => (b['created_at'] as DateTime)
-            .compareTo(a['created_at'] as DateTime));
+        if (_currentNotes.isNotEmpty) {
+          _currentNotes.sort((a, b) => (b['created_at'] as DateTime)
+              .compareTo(a['created_at'] as DateTime));
+        }
         _selectedNote = null;
         _isLoading = false;
       });
     } catch (e) {
+      print('DEBUG: error = $e');
       if (mounted) {
+        // 清空當前資料夾狀態
         setState(() {
           _currentFolderId = '';
           _currentFolderName = '';
@@ -356,6 +361,27 @@ class _HomePageState extends State<HomePage> {
           _selectedNote = null;
           _isLoading = false;
         });
+
+        // 如果是找不到資料夾，重新載入資料夾列表
+        if (e.toString().contains('找不到此資料夾')) {
+          _loadFolders();  // 重新載入資料夾列表
+        }
+
+        // 顯示錯誤訊息
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+            action: e.toString().contains('找不到此資料夾') ? SnackBarAction(
+              label: '確定',
+              textColor: Colors.white,
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              },
+            ) : null,
+          ),
+        );
       }
     }
   }

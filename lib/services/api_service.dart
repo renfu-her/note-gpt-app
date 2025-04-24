@@ -167,19 +167,35 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getFolderNotes(int folderId) async {
+    print('DEBUG: folderId = $folderId');
     try {
       final response = await _dio.get('/notes/folders/$folderId');
+      print('DEBUG: response = ${response.data}');
+      
+      final data = response.data;
       return {
-        'id': response.data['id'] as int,
-        'name': response.data['name'] as String,
-        'notes': (response.data['notes'] as List).map((note) => {
-          'id': note['id'] as int,
-          'title': note['title'] as String,
-          'created_at': DateTime.parse(note['created_at']),
-        }).toList(),
+        'id': data['id'] as int,
+        'name': data['name'] as String,
+        'notes': (data['notes'] as List).map((note) {
+          if (note is Map) {
+            return {
+              'id': note['id'] as int,
+              'title': note['title'] as String,
+              'created_at': DateTime.parse(note['created_at']),
+            };
+          }
+          return null;
+        }).where((note) => note != null).toList(),
       };
     } catch (e) {
-      throw Exception('獲取資料夾筆記失敗');
+      print('DEBUG: error = $e');
+      if (e is DioException) {
+        if (e.response?.statusCode == 404) {
+          throw '找不到此資料夾，可能已被刪除';
+        }
+        throw e.response?.data?['message'] ?? '載入資料夾失敗';
+      }
+      throw '載入資料夾失敗：$e';
     }
   }
 
@@ -333,6 +349,36 @@ class ApiService {
         throw e.response?.data['message'];
       }
       throw '更新筆記失敗';
+    }
+  }
+
+  Future<void> deleteFolder(int folderId) async {
+    final token = await _storage.read(key: 'token');
+    if (token == null) {
+      throw '未登入';
+    }
+
+    try {
+      final response = await _dio.delete(
+        '/folders/$folderId',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      if (response.statusCode != 200) {
+        throw '刪除資料夾失敗';
+      }
+    } catch (e) {
+      if (e is DioException) {
+        if (e.response?.statusCode == 403) {
+          throw '沒有權限刪除此資料夾';
+        }
+        throw e.response?.data?['message'] ?? '刪除資料夾失敗';
+      }
+      throw '刪除資料夾失敗：$e';
     }
   }
 } 
